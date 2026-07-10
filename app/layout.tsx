@@ -2,8 +2,8 @@ import './globals.css';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Perfume Agent',
-  description: 'DIY fragrance formulation assistant',
+  title: 'iGEM Perfume Booth',
+  description: 'Quick perfume booth experience powered by an agent',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -3,19 +3,139 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 html, body {
   margin: 0;
   padding: 0;
   min-height: 100%;
+  overflow-x: hidden;
 }
 
 body {
-  @apply bg-zinc-950 text-zinc-100 antialiased;
+  @apply text-slate-900 antialiased;
+  width: 100%;
 }
 
 * {
   box-sizing: border-box;
+}
+
+.booth-page {
+  width: 100%;
+  max-width: 100vw;
+  background:
+    radial-gradient(circle at top, #fff1f7 0%, #fde7f3 18%, #f5d0fe 40%, #ddd6fe 62%, #f5f3ff 100%);
+}
+
+.booth-glass-strong {
+  max-width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 20px 80px rgba(168, 85, 247, 0.16);
+  backdrop-filter: blur(18px);
+}
+
+.booth-glass {
+  max-width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 16px 60px rgba(168, 85, 247, 0.12);
+  backdrop-filter: blur(18px);
+}
+
+.booth-inner-card {
+  max-width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 24px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.86), rgba(253, 244, 255, 0.82));
+  box-shadow: 0 10px 32px rgba(168, 85, 247, 0.1);
+}
+
+.booth-aurora {
+  position: absolute;
+  width: 42rem;
+  height: 42rem;
+  border-radius: 9999px;
+  filter: blur(48px);
+  mix-blend-mode: multiply;
+  animation: booth-float 14s ease-in-out infinite;
+}
+
+.quick-prompt-rail {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+  contain: inline-size;
+}
+
+.quick-prompt-track {
+  display: flex;
+  width: fit-content;
+  max-width: none;
+  gap: 0.5rem;
+  animation: quick-prompt-scroll 68s linear infinite;
+  will-change: transform;
+}
+
+.quick-prompt-rail:hover .quick-prompt-track {
+  animation-play-state: paused;
+}
+
+.quick-prompt-chip {
+  white-space: nowrap;
+}
+
+.booth-aurora-a {
+  left: -12rem;
+  top: 4rem;
+  background: rgba(244, 114, 182, 0.28);
+}
+
+.booth-aurora-b {
+  right: -10rem;
+  top: 14rem;
+  background: rgba(129, 140, 248, 0.28);
+  animation-delay: -5s;
+}
+
+.booth-aurora-c {
+  left: 28%;
+  bottom: -18rem;
+  background: rgba(45, 212, 191, 0.18);
+  animation-delay: -9s;
+}
+
+@keyframes booth-float {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(2rem, -1.5rem, 0) scale(1.08);
+  }
+}
+
+@keyframes quick-prompt-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .booth-aurora,
+  .quick-prompt-track {
+    animation: none;
+  }
 }

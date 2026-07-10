@@ -8,6 +8,15 @@ export type NoteItem = {
   percentage: number;
 };
 
+export type BoothStep = {
+  material: string;
+  noteRole: 'top' | 'heart' | 'base';
+  percentage: number;
+  distance: string;
+  waitSeconds: number;
+  instruction: string;
+};
+
 export type FormulaResponse = {
   fragrancePositioning: {
     style: string;
@@ -21,12 +30,13 @@ export type FormulaResponse = {
   };
   blendingSuggestion: {
     recommendedConcentration: string;
-    targetVolumeMl: number;
-    fragranceConcentrateMl: number;
-    alcoholMl: number;
-    solventMl: number;
-    maceration: string;
+    targetVolumeMl?: number;
+    fragranceConcentrateMl?: number;
+    alcoholMl?: number;
+    solventMl?: number;
+    maceration?: string;
   };
+  boothSteps: BoothStep[];
   finalEffect: {
     opening: string;
     heart: string;
@@ -34,65 +44,94 @@ export type FormulaResponse = {
     sillage: string;
     longevity: string;
   };
-  adjustments: {
+  adjustments?: {
     fresher: string;
     softer: string;
     longerLasting: string;
   };
   safetyNote: string;
-  rawText: string;
+  rawText?: string;
 };
 
 export type GenerateResponse = {
   mode: 'llm' | 'fallback';
+  sessionId: string;
   replyText: string;
   formula: FormulaResponse;
 };
 
-/** 防御性规范化 LLM 返回的 formula，避免前端 crash */
-export function sanitizeFormula(raw: any): FormulaResponse {
-  const str = (v: any) => (typeof v === 'string' ? v : '');
-  const arr = (v: any) => (Array.isArray(v) ? v : []);
-  const num = (v: any) => (typeof v === 'number' && !Number.isNaN(v) ? v : 0);
+function toStringValue(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
 
+function toStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
+}
+
+function toNumber(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function sanitizeNotes(value: unknown): NoteItem[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item: any) => ({
+    name: toStringValue(item?.name),
+    percentage: toNumber(item?.percentage)
+  })).filter((item) => item.name);
+}
+
+function sanitizeBoothSteps(value: unknown): BoothStep[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item: any) => ({
+    material: toStringValue(item?.material),
+    noteRole: item?.noteRole === 'heart' || item?.noteRole === 'base' ? item.noteRole : 'top',
+    percentage: toNumber(item?.percentage),
+    distance: toStringValue(item?.distance),
+    waitSeconds: toNumber(item?.waitSeconds),
+    instruction: toStringValue(item?.instruction)
+  })).filter((item) => item.material);
+}
+
+export function sanitizeFormula(raw: any): FormulaResponse {
   const pos = raw?.fragrancePositioning || {};
-  const fml = raw?.formula || {};
+  const formula = raw?.formula || {};
   const blend = raw?.blendingSuggestion || {};
-  const eff = raw?.finalEffect || {};
-  const adj = raw?.adjustments || {};
+  const effect = raw?.finalEffect || {};
+  const adjustments = raw?.adjustments;
 
   return {
     fragrancePositioning: {
-      style: str(pos.style),
-      keywords: arr(pos.keywords).map(String),
-      suitableScenarios: arr(pos.suitableScenarios).map(String)
+      style: toStringValue(pos.style),
+      keywords: toStringArray(pos.keywords),
+      suitableScenarios: toStringArray(pos.suitableScenarios)
     },
     formula: {
-      topNotes: arr(fml.topNotes).map((n: any) => ({ name: str(n?.name), percentage: num(n?.percentage) })),
-      heartNotes: arr(fml.heartNotes).map((n: any) => ({ name: str(n?.name), percentage: num(n?.percentage) })),
-      baseNotes: arr(fml.baseNotes).map((n: any) => ({ name: str(n?.name), percentage: num(n?.percentage) }))
+      topNotes: sanitizeNotes(formula.topNotes),
+      heartNotes: sanitizeNotes(formula.heartNotes),
+      baseNotes: sanitizeNotes(formula.baseNotes)
     },
     blendingSuggestion: {
-      recommendedConcentration: str(blend.recommendedConcentration),
-      targetVolumeMl: num(blend.targetVolumeMl),
-      fragranceConcentrateMl: num(blend.fragranceConcentrateMl),
-      alcoholMl: num(blend.alcoholMl),
-      solventMl: num(blend.solventMl),
-      maceration: str(blend.maceration)
+      recommendedConcentration: toStringValue(blend.recommendedConcentration),
+      targetVolumeMl: toNumber(blend.targetVolumeMl) || undefined,
+      fragranceConcentrateMl: toNumber(blend.fragranceConcentrateMl) || undefined,
+      alcoholMl: toNumber(blend.alcoholMl) || undefined,
+      solventMl: toNumber(blend.solventMl) || undefined,
+      maceration: toStringValue(blend.maceration) || undefined
     },
+    boothSteps: sanitizeBoothSteps(raw?.boothSteps),
     finalEffect: {
-      opening: str(eff.opening),
-      heart: str(eff.heart),
-      drydown: str(eff.drydown),
-      sillage: str(eff.sillage),
-      longevity: str(eff.longevity)
+      opening: toStringValue(effect.opening),
+      heart: toStringValue(effect.heart),
+      drydown: toStringValue(effect.drydown),
+      sillage: toStringValue(effect.sillage),
+      longevity: toStringValue(effect.longevity)
     },
-    adjustments: {
-      fresher: str(adj.fresher),
-      softer: str(adj.softer),
-      longerLasting: str(adj.longerLasting)
-    },
-    safetyNote: str(raw?.safetyNote),
-    rawText: str(raw?.rawText)
+    adjustments: adjustments ? {
+      fresher: toStringValue(adjustments.fresher),
+      softer: toStringValue(adjustments.softer),
+      longerLasting: toStringValue(adjustments.longerLasting)
+    } : undefined,
+    safetyNote: toStringValue(raw?.safetyNote),
+    rawText: toStringValue(raw?.rawText) || undefined
   };
 }

@@ -1,153 +1,155 @@
-import { FormulaResponse } from './types';
+import { boothMaterials, type BoothMaterial, type NoteRole } from '@/data/ingredients';
+import { analyzeIntent } from './intent';
+import { selectMaterials, type SelectionPlan } from './materialSelector';
+import type { BoothStep, FormulaResponse, NoteItem } from './types';
 
-export function buildFallbackResponse(userText: string): FormulaResponse {
-  const rainy = /雨|阴|湿|潮/.test(userText);
-  const warm = /热|夏|晒/.test(userText);
-  const date = /约会|恋爱|暧昧/.test(userText);
+function distance(percentage: number): string {
+  if (percentage >= 40) return '2-3cm';
+  if (percentage >= 30) return '4-5cm';
+  if (percentage >= 20) return '6-7cm';
+  return '8-9cm';
+}
 
-  if (date) {
-    return {
-      fragrancePositioning: {
-        style: '温柔贴肤花麝香',
-        keywords: ['soft', 'romantic', 'skin scent'],
-        suitableScenarios: ['date', 'dinner', 'close contact']
-      },
-      formula: {
-        topNotes: [{ name: 'Bergamot', percentage: 10 }],
-        heartNotes: [{ name: 'Rose', percentage: 12 }, { name: 'Neroli', percentage: 10 }, { name: 'Iris', percentage: 8 }],
-        baseNotes: [{ name: 'White Musk', percentage: 30 }, { name: 'Sandalwood', percentage: 18 }, { name: 'Vanilla', percentage: 6 }]
-      },
-      blendingSuggestion: {
-        recommendedConcentration: 'EDP',
-        targetVolumeMl: 10,
-        fragranceConcentrateMl: 1.8,
-        alcoholMl: 7.7,
-        solventMl: 0.5,
-        maceration: '10-14 days'
-      },
-      finalEffect: {
-        opening: '轻柔明亮，没攻击性',
-        heart: '花香柔软，贴近皮肤',
-        drydown: '温暖麝香与木质包裹感',
-        sillage: 'low-medium',
-        longevity: 'medium'
-      },
-      adjustments: {
-        fresher: '增加佛手柑',
-        softer: '增加白麝香',
-        longerLasting: '增加檀香或琥珀'
-      },
-      safetyNote: 'DIY 建议，不替代专业安全评估。',
-      rawText: 'fallback date formula'
-    };
+function step(material: string, noteRole: BoothStep['noteRole'], percentage: number): BoothStep {
+  const sprayDistance = distance(percentage);
+  return {
+    material,
+    noteRole,
+    percentage,
+    distance: sprayDistance,
+    waitSeconds: 10,
+    instruction: `喷 1 下，距离 ${sprayDistance}，等待 10 秒`
+  };
+}
+
+function notesToSteps(topNotes: NoteItem[], heartNotes: NoteItem[], baseNotes: NoteItem[]): BoothStep[] {
+  return [
+    ...topNotes.map((item) => step(item.name, 'top', item.percentage)),
+    ...heartNotes.map((item) => step(item.name, 'heart', item.percentage)),
+    ...baseNotes.map((item) => step(item.name, 'base', item.percentage))
+  ];
+}
+
+function pickMaterial(plan: SelectionPlan, role: NoteRole, fallbackId: string, used: Set<string>) {
+  const roleCandidates = role === 'top' ? plan.top : role === 'heart' ? plan.heart : plan.base;
+  const candidate = roleCandidates.find((item) => !used.has(item.material.nameZh));
+  const material = candidate?.material || boothMaterials.find((item) => item.id === fallbackId) || boothMaterials[0];
+  used.add(material.nameZh);
+  return material;
+}
+
+function clampUsage(material: BoothMaterial, desired: number) {
+  const [min, max] = material.usageRange;
+  return Math.max(min, Math.min(max, desired));
+}
+
+function buildNotes(plan: SelectionPlan) {
+  const used = new Set<string>();
+  const wantsSweet = plan.intent.desiredFacets.sweet >= 4 && !plan.intent.dislikes.includes('甜腻');
+  const wantsWoody = plan.intent.desiredFacets.woody >= 4;
+  const wantsWatery = plan.intent.desiredFacets.watery >= 4;
+
+  const topA = pickMaterial(plan, 'top', wantsWatery ? 'sea-breeze-bell' : 'green-tea', used);
+  const topB = pickMaterial(plan, 'top', 'japanese-citrus', used);
+  const heartA = pickMaterial(plan, 'heart', wantsSweet ? 'osmanthus-oolong' : 'jasmine-floral-ring', used);
+  const heartB = pickMaterial(plan, 'heart', wantsWatery ? 'watery-berry' : 'osmanthus-oolong', used);
+  const baseA = pickMaterial(plan, 'base', wantsSweet ? 'french-vanilla' : wantsWoody ? 'smoky-agarwood' : 'desert-rose', used);
+
+  let topNotes: NoteItem[] = [
+    { name: topA.nameZh, percentage: clampUsage(topA, 22) },
+    { name: topB.nameZh, percentage: clampUsage(topB, 18) }
+  ];
+  let heartNotes: NoteItem[] = [
+    { name: heartA.nameZh, percentage: clampUsage(heartA, 28) }
+  ];
+  let baseNotes: NoteItem[] = [
+    { name: baseA.nameZh, percentage: clampUsage(baseA, 24) }
+  ];
+
+  if (heartB.nameZh !== heartA.nameZh && topNotes.length + heartNotes.length + baseNotes.length < 5) {
+    heartNotes.push({ name: heartB.nameZh, percentage: clampUsage(heartB, 8) });
   }
 
-  if (rainy) {
-    return {
-      fragrancePositioning: {
-        style: '雨后校园书卷气',
-        keywords: ['rainy', 'tea', 'clean', 'soft woody'],
-        suitableScenarios: ['commute', 'library', 'walking']
-      },
-      formula: {
-        topNotes: [{ name: 'Bergamot', percentage: 16 }, { name: 'Green Notes', percentage: 7 }, { name: 'Aquatic Notes', percentage: 4 }],
-        heartNotes: [{ name: 'White Tea', percentage: 21 }, { name: 'Iris', percentage: 10 }, { name: 'Violet Leaf', percentage: 8 }],
-        baseNotes: [{ name: 'Cedarwood', percentage: 14 }, { name: 'White Musk', percentage: 14 }, { name: 'Vetiver', percentage: 6 }]
-      },
-      blendingSuggestion: {
-        recommendedConcentration: 'EDP',
-        targetVolumeMl: 10,
-        fragranceConcentrateMl: 1.8,
-        alcoholMl: 7.7,
-        solventMl: 0.5,
-        maceration: '10-14 days'
-      },
-      finalEffect: {
-        opening: '潮湿空气里的清亮柑橘',
-        heart: '茶感、纸张感、安静',
-        drydown: '贴肤木质和白麝香',
-        sillage: 'low-medium',
-        longevity: 'medium'
-      },
-      adjustments: {
-        fresher: '增加绿叶或水生调',
-        softer: '增加白麝香',
-        longerLasting: '增加雪松或少量琥珀'
-      },
-      safetyNote: 'DIY 建议，不替代专业安全评估。',
-      rawText: 'fallback rainy formula'
-    };
-  }
+  const all = [...topNotes, ...heartNotes, ...baseNotes];
+  const total = all.reduce((sum, item) => sum + item.percentage, 0);
+  const delta = 100 - total;
+  const target = heartNotes[0] || baseNotes[0] || topNotes[0];
+  target.percentage += delta;
 
-  if (warm) {
-    return {
-      fragrancePositioning: {
-        style: '夏日清爽通勤香',
-        keywords: ['fresh', 'citrus', 'tea', 'soft musk'],
-        suitableScenarios: ['office', 'commute', 'daytime']
-      },
-      formula: {
-        topNotes: [{ name: 'Bergamot', percentage: 18 }, { name: 'Lemon', percentage: 8 }],
-        heartNotes: [{ name: 'White Tea', percentage: 22 }, { name: 'Neroli', percentage: 10 }],
-        baseNotes: [{ name: 'White Musk', percentage: 22 }, { name: 'Cedarwood', percentage: 12 }, { name: 'Vetiver', percentage: 8 }]
-      },
-      blendingSuggestion: {
-        recommendedConcentration: 'EDP',
-        targetVolumeMl: 10,
-        fragranceConcentrateMl: 1.8,
-        alcoholMl: 7.7,
-        solventMl: 0.5,
-        maceration: '7-14 days'
-      },
-      finalEffect: {
-        opening: '明亮清爽',
-        heart: '干净茶感与皂感',
-        drydown: '轻木质和麝香',
-        sillage: 'low-medium',
-        longevity: 'medium'
-      },
-      adjustments: {
-        fresher: '增加柠檬或葡萄柚',
-        softer: '增加白茶和白麝香',
-        longerLasting: '增加雪松'
-      },
-      safetyNote: 'DIY 建议，不替代专业安全评估。',
-      rawText: 'fallback warm formula'
-    };
-  }
+  topNotes = topNotes.filter((item) => item.percentage > 0);
+  heartNotes = heartNotes.filter((item) => item.percentage > 0);
+  baseNotes = baseNotes.filter((item) => item.percentage > 0);
+
+  return { topNotes, heartNotes, baseNotes };
+}
+
+function roleText(materialName: string) {
+  return boothMaterials.find((item) => item.nameZh === materialName)?.professionalRole || '负责补足香气结构。';
+}
+
+function buildFormula(plan: SelectionPlan): FormulaResponse {
+  const notes = buildNotes(plan);
+  const allNotes = [...notes.topNotes, ...notes.heartNotes, ...notes.baseNotes];
+  const topNames = notes.topNotes.map((item) => item.name).join('和');
+  const heartNames = notes.heartNotes.map((item) => item.name).join('和');
+  const baseNames = notes.baseNotes.map((item) => item.name).join('和');
+  const style = plan.intent.moods.includes('浪漫')
+    ? '克制花香记忆款'
+    : plan.intent.desiredFacets.watery >= 4
+      ? '清透水感试香'
+      : plan.intent.desiredFacets.warm >= 4
+        ? '温暖沉稳氛围香'
+        : '清爽花茶日常香';
+  const keywords = [
+    ...(plan.intent.moods.length ? plan.intent.moods.slice(0, 2) : ['清爽', '易接受']),
+    ...(plan.intent.constraints.includes('低门槛') ? ['低门槛'] : ['有层次'])
+  ].slice(0, 3);
+  const scenarios = plan.intent.scenarios.length ? plan.intent.scenarios : ['路演体验', '日常试香'];
 
   return {
     fragrancePositioning: {
-      style: '高级冷淡感木质茶香',
-      keywords: ['minimal', 'cool', 'tea', 'woody'],
-      suitableScenarios: ['office', 'commute', 'library']
+      style,
+      keywords,
+      suitableScenarios: scenarios
     },
-    formula: {
-      topNotes: [{ name: 'Bergamot', percentage: 14 }],
-      heartNotes: [{ name: 'White Tea', percentage: 24 }, { name: 'Iris', percentage: 8 }, { name: 'Violet Leaf', percentage: 6 }],
-      baseNotes: [{ name: 'Cedarwood', percentage: 16 }, { name: 'White Musk', percentage: 22 }, { name: 'Vetiver', percentage: 10 }]
-    },
+    formula: notes,
     blendingSuggestion: {
-      recommendedConcentration: 'EDP',
-      targetVolumeMl: 10,
-      fragranceConcentrateMl: 1.8,
-      alcoholMl: 7.7,
-      solventMl: 0.5,
-      maceration: '10-14 days'
+      recommendedConcentration: `按前调、中调、后调顺序喷在同一张试香纸上，每种原料 1 下，每步等待 10 秒，最后自然晾干 2-3 分钟再评价。`
     },
+    boothSteps: notesToSteps(notes.topNotes, notes.heartNotes, notes.baseNotes),
     finalEffect: {
-      opening: '干净冷感',
-      heart: '茶感与纸张感',
-      drydown: '木质麝香贴肤',
-      sillage: 'low',
-      longevity: 'medium'
+      opening: `${topNames || '前调'}先给出第一印象，让香气开场更明亮、更容易接近。`,
+      heart: `${heartNames || '中调'}负责主体性格，让香气从单一气味变成有主题的体验。`,
+      drydown: `${baseNames || '后调'}负责收尾和稳定度，让试香纸晾干后仍有记忆点。`,
+      sillage: allNotes.some((item) => item.percentage >= 35) ? '中等，适合展台近距离闻香' : '轻到中等，适合第一次体验',
+      longevity: '体验卡约 3-6 小时，现场建议以晾干 2-3 分钟后的效果为准'
     },
     adjustments: {
-      fresher: '增加佛手柑',
-      softer: '增加白麝香',
-      longerLasting: '增加雪松或琥珀'
+      fresher: '想更清爽，下一轮提高绿茶、柑橘或海风类前调，降低香草、咖啡和厚重木质。',
+      softer: '想更柔和，下一轮增加桂花乌龙或水影浆果，让边缘更圆润。',
+      longerLasting: '想更持久，下一轮可以小幅提高乌木、玫瑰木质或香草类后调。'
     },
-    safetyNote: 'DIY 建议，不替代专业安全评估。',
-    rawText: 'fallback default formula'
+    safetyNote: '请喷在试香纸上，避开眼睛、口鼻和伤口；过敏者谨慎体验。'
+  };
+}
+
+function buildReply(formula: FormulaResponse) {
+  const firstMaterial = formula.formula.heartNotes[0]?.name || formula.formula.topNotes[0]?.name || formula.formula.baseNotes[0]?.name || '';
+
+  return [
+    `这版定位成「${formula.fragrancePositioning.style}」，关键词是${formula.fragrancePositioning.keywords.join('、')}，适合${formula.fragrancePositioning.suitableScenarios.join('、')}。`,
+    `核心选材围绕${firstMaterial || '中调主体'}展开：${roleText(firstMaterial)}整体会先建立清晰第一印象，再过渡到主体气质，最后留下稳定的尾调记忆点。`,
+    `下面的配方卡已经列出具体比例和步骤；如果想微调，可以直接说“更清爽”“更柔和”或“更持久”。`
+  ].join('');
+}
+
+export async function generateFallback(input: string, plan?: SelectionPlan) {
+  const selectionPlan = plan || selectMaterials(analyzeIntent(input));
+  const formula = buildFormula(selectionPlan);
+
+  return {
+    mode: 'fallback' as const,
+    replyText: buildReply(formula),
+    formula
   };
 }
