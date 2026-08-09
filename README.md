@@ -2,6 +2,19 @@
 
 面向路演展台的 Next.js 香水 Agent。访客用一句话描述想要的情绪、场景或风格，系统会从展台已有香水原料中选择 3-5 种，生成可现场执行的试香卡，并收集评分反馈。
 
+## 线上路演网站
+
+生产环境已部署在 Vercel：
+
+```text
+https://perfume-booth-app.vercel.app
+```
+
+- 现场体验入口：<https://perfume-booth-app.vercel.app>
+- 后台管理页：<https://perfume-booth-app.vercel.app/admin/feedback>
+- 记录 JSON：<https://perfume-booth-app.vercel.app/api/records>
+- CSV 导出：<https://perfume-booth-app.vercel.app/api/records?format=csv>
+
 ## 当前模型
 
 线上当前使用：
