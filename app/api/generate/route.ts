@@ -8,12 +8,21 @@ import { appendBoothRecord, createSessionId } from '@/lib/records';
 import { sanitizeFormula } from '@/lib/types';
 import { assertUsableFormula } from '@/lib/validation';
 import type { ChatMessage } from '@/lib/types';
+import type { Lang } from '@/lib/i18n';
 
 function normalizeHistory(history: unknown): ChatMessage[] {
   if (!Array.isArray(history)) return [];
   return history
     .filter((item: any) => item && (item.role === 'user' || item.role === 'assistant') && typeof item.content === 'string')
     .map((item: any) => ({ role: item.role, content: item.content }));
+}
+
+function assertEnglishOutput(value: unknown, lang: Lang) {
+  if (lang !== 'en') return;
+  const serialized = JSON.stringify(value);
+  if (/[\u3400-\u9fff]/u.test(serialized)) {
+    throw new Error('The live model returned untranslated content.');
+  }
 }
 
 async function recordGeneration(input: {
@@ -36,8 +45,11 @@ async function recordGeneration(input: {
 }
 
 export async function POST(req: NextRequest) {
+  let requestLang: Lang = 'zh';
   try {
     const body = await req.json();
+    const lang: Lang = body?.lang === 'en' ? 'en' : 'zh';
+    requestLang = lang;
     const message = String(body?.message || '').trim();
     const sessionId = String(body?.sessionId || createSessionId());
     const currentFormula = body?.currentFormula ? sanitizeFormula(body.currentFormula) : null;
@@ -55,7 +67,7 @@ export async function POST(req: NextRequest) {
       const response = {
         mode: 'fallback' as const,
         sessionId,
-        replyText: buildFormulaExplanation(message, currentFormula),
+        replyText: buildFormulaExplanation(message, currentFormula, lang),
         formula: currentFormula
       };
 
@@ -75,11 +87,13 @@ export async function POST(req: NextRequest) {
     const selectionPlan = selectMaterials(intent);
 
     if (!currentFormula && isExplanationQuestion(message)) {
-      const fallback = await generateFallback(message, selectionPlan);
+      const fallback = await generateFallback(message, selectionPlan, lang);
       const response = {
         mode: 'fallback' as const,
         sessionId,
-        replyText: '这个问题更像是在追问上一版配方的原因。你可以先生成一张试香卡，或者告诉我你想问哪一种原料；有了具体配方后，我会解释每个原料为什么被加入，而不会擅自改配方。',
+        replyText: lang === 'en'
+          ? 'This sounds like a question about an earlier formula. Generate a scent card first, or tell me which material you want to understand. Once there is a formula, I can explain each choice without changing it.'
+          : '这个问题更像是在追问上一版配方的原因。你可以先生成一张试香卡，或者告诉我你想问哪一种原料；有了具体配方后，我会解释每个原料为什么被加入，而不会擅自改配方。',
         formula: sanitizeFormula(fallback.formula)
       };
 
@@ -96,10 +110,11 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      const llmResult = await generateWithLLM(messages, selectionPlan);
+      const llmResult = await generateWithLLM(messages, selectionPlan, lang);
       if (llmResult) {
         const formula = sanitizeFormula(llmResult.formula);
         assertUsableFormula(formula);
+        assertEnglishOutput({ replyText: llmResult.replyText, formula }, lang);
         const response = { ...llmResult, sessionId, formula };
 
         await recordGeneration({
@@ -114,7 +129,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(response);
       }
     } catch (llmError) {
-      const fallback = await generateFallback(message, selectionPlan);
+      const fallback = await generateFallback(message, selectionPlan, lang);
       const formula = sanitizeFormula(fallback.formula);
       assertUsableFormula(formula);
       const response = {
@@ -122,7 +137,9 @@ export async function POST(req: NextRequest) {
         sessionId,
         replyText: fallback.replyText,
         formula,
-        debug: llmError instanceof Error ? llmError.message : 'Unknown LLM error'
+        debug: lang === 'en'
+          ? 'The live model was unavailable, so local demo rules were used.'
+          : (llmError instanceof Error ? llmError.message : '未知模型错误')
       };
 
       await recordGeneration({
@@ -137,7 +154,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(response);
     }
 
-    const fallback = await generateFallback(message, selectionPlan);
+    const fallback = await generateFallback(message, selectionPlan, lang);
     const formula = sanitizeFormula(fallback.formula);
     assertUsableFormula(formula);
     const response = {
@@ -159,7 +176,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(response);
   } catch (error) {
     return NextResponse.json({
-      error: error instanceof Error ? error.message : 'failed to generate response'
+      error: requestLang === 'en'
+        ? 'We could not generate a scent card. Please try again.'
+        : (error instanceof Error ? error.message : '生成失败，请稍后再试。')
     }, { status: 500 });
   }
 }

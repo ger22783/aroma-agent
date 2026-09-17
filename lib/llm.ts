@@ -1,4 +1,5 @@
-import { buildGenerationPromptContext, SYSTEM_PROMPT } from './prompt';
+import { buildGenerationPromptContext, getSystemPrompt } from './prompt';
+import type { Lang } from './i18n';
 import type { SelectionPlan } from './materialSelector';
 import type { ChatMessage, FormulaResponse } from './types';
 
@@ -37,14 +38,15 @@ function extractJsonObject(content: string) {
 
 export async function generateWithLLM(
   messages: ChatMessage[],
-  plan?: SelectionPlan
+  plan?: SelectionPlan,
+  lang: Lang = 'zh'
 ): Promise<LlmGenerateResponse | null> {
   const apiKey = getEnv('OPENAI_API_KEY');
   const baseUrl = normalizeBaseUrl(getEnv('OPENAI_BASE_URL') || 'https://api.openai.com/v1');
   const model = getEnv('OPENAI_MODEL') || 'gpt-4.1-mini';
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
-  const context = buildGenerationPromptContext(plan);
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  const context = buildGenerationPromptContext(plan, lang);
 
   if (!apiKey) {
     throw new Error('运行环境缺少 OPENAI_API_KEY');
@@ -62,10 +64,12 @@ export async function generateWithLLM(
       body: JSON.stringify({
         model,
         max_tokens: 3200,
-        temperature: 0.55,
+        temperature: 0.25,
+        thinking: { type: 'disabled' },
+        reasoning_effort: 'none',
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: getSystemPrompt(lang) },
           ...(context ? [{ role: 'system' as const, content: context }] : []),
           ...messages.map((message) => ({
             role: message.role === 'assistant' ? 'assistant' : 'user',
@@ -76,7 +80,7 @@ export async function generateWithLLM(
     });
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('LLM 请求超过 8 秒，已切换到本地规则。');
+      throw new Error('LLM 请求超过 15 秒，已切换到本地规则。');
     }
     throw error;
   } finally {

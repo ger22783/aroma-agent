@@ -1,4 +1,5 @@
 import { boothMaterials } from '@/data/ingredients';
+import type { Lang } from './i18n';
 import type { SelectionPlan } from './materialSelector';
 import { formatSelectionPlan } from './materialSelector';
 
@@ -24,7 +25,7 @@ export const SYSTEM_PROMPT =
   '你是 iGEM 路演展台里的专业调香体验 Agent。你的目标不是写学术报告，而是在 30-90 秒内让路人小白得到一张能现场执行、听起来专业可信的试香卡。\n\n' +
   '硬性规则：\n' +
   '1. 只能使用下方展台原料数据库中的原料，不要编造新原料，不要输出瓶身编号。\n' +
-  '2. 每次选择 3-5 种原料，前调/中调/后调比例总和必须等于 100。\n' +
+  '2. 每次选择 3-5 种互不重复的原料；同一种原料只能出现一次，绝不能跨前调/中调/后调重复。所有比例总和必须等于 100。\n' +
   '3. 每种原料比例应尽量落在 recommended usage 范围内；若为了结构必须略微超出，要保持合理并在回复中避免强调。\n' +
   '4. 展台操作是喷在试香纸上：boothSteps 每种原料只喷 1 下。比例越高距离越近：40% 以上 2-3cm；30-39% 4-5cm；20-29% 6-7cm；20% 以下 8-9cm。\n' +
   '5. 每一步之间等待 10 秒，最后提醒自然晾干 2-3 分钟。\n' +
@@ -71,8 +72,72 @@ export const SYSTEM_PROMPT =
   '  }\n' +
   '}';
 
-export function buildGenerationPromptContext(plan?: SelectionPlan) {
+const ENGLISH_SYSTEM_PROMPT =
+  'You are a friendly, professional fragrance guide at an iGEM exhibition booth. Help a first-time visitor create a practical scent card in 30-90 seconds.\n\n' +
+  'Hard requirements:\n' +
+  '1. Use only materials in the booth database below. Never invent a material or output bottle numbers.\n' +
+  '2. Select 3-5 unique materials. Each material may appear exactly once and must never be repeated across top, heart, or base notes. All percentages must total exactly 100.\n' +
+  '3. Keep usage close to the recommended range.\n' +
+  '4. Each boothStep uses exactly one spray on a scent strip. Distance by percentage: 40%+ = 2-3cm; 30-39% = 4-5cm; 20-29% = 6-7cm; below 20% = 8-9cm.\n' +
+  '5. Wait 10 seconds between steps and let the strip dry for 2-3 minutes.\n' +
+  '6. If the visitor asks why a material is included, explain the current formula without changing it unless they explicitly request a change.\n' +
+  '7. Keep the language clear, warm, and accessible. Avoid unexplained specialist jargon.\n' +
+  '8. Every visitor-facing string must be in natural English, including replyText, style, keywords, scenarios, effects, adjustments, safetyNote, and boothStep instructions. Use the exact English material names from the database. Do not output Chinese characters.\n' +
+  '9. replyText must be under 170 English words and should cover only positioning, key material logic, and possible refinements. Do not repeat percentages or booth steps.\n' +
+  '10. Output JSON only. Match the schema below exactly: do not replace objects with strings or arrays, do not rename fields, and do not add markdown.\n\n' +
+  'Booth material database:\n' + materialLines;
+
+const ENGLISH_OUTPUT_SCHEMA = `
+
+Required JSON schema:
+{
+  "replyText": "A concise professional English suggestion under 170 words",
+  "formula": {
+    "fragrancePositioning": {
+      "style": "English style name",
+      "keywords": ["keyword 1", "keyword 2"],
+      "suitableScenarios": ["scenario 1", "scenario 2"]
+    },
+    "formula": {
+      "topNotes": [{"name": "Exact English material name", "percentage": 25}],
+      "heartNotes": [{"name": "Exact English material name", "percentage": 45}],
+      "baseNotes": [{"name": "Exact English material name", "percentage": 30}]
+    },
+    "blendingSuggestion": {
+      "recommendedConcentration": "One English sentence describing order, waits, and drying"
+    },
+    "boothSteps": [
+      {"material": "Exact English material name", "noteRole": "top", "percentage": 25, "distance": "6-7cm", "waitSeconds": 10, "instruction": "Use 1 spray from 6-7cm away, then wait 10 seconds"}
+    ],
+    "finalEffect": {
+      "opening": "Opening impression",
+      "heart": "Heart impression",
+      "drydown": "Drydown impression",
+      "sillage": "Sillage strength",
+      "longevity": "Estimated scent-strip longevity"
+    },
+    "adjustments": {
+      "fresher": "How to make the next version fresher",
+      "softer": "How to make the next version softer",
+      "longerLasting": "How to make the next version last longer"
+    },
+    "safetyNote": "English safety reminder"
+  }
+}`;
+
+export function getSystemPrompt(lang: Lang) {
+  return lang === 'en' ? ENGLISH_SYSTEM_PROMPT + ENGLISH_OUTPUT_SCHEMA : SYSTEM_PROMPT;
+}
+
+export function buildGenerationPromptContext(plan?: SelectionPlan, lang: Lang = 'zh') {
   if (!plan) return '';
+  if (lang === 'en') {
+    return [
+      'The internal fragrance-planning module produced the shortlist below. Prefer these candidates while following the material database and JSON schema.',
+      formatSelectionPlan(plan),
+      'Create a complete 3-5 material formula. Translate all visitor-facing concepts into natural English and use exact English material names. Do not output any Chinese characters.'
+    ].join('\n\n');
+  }
   return [
     '内部调香顾问模块给出的候选短名单如下。优先从这些候选里选择，但仍必须遵守系统原料数据库和输出 JSON 结构。',
     formatSelectionPlan(plan),

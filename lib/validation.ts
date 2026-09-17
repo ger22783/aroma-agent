@@ -1,8 +1,11 @@
 import { boothMaterials } from '@/data/ingredients';
 import type { FormulaResponse } from './types';
 
-const materialByName = new Map(boothMaterials.map((item) => [item.nameZh, item]));
-const allowedMaterialNames = new Set(boothMaterials.map((item) => item.nameZh));
+const materialByName = new Map(boothMaterials.flatMap((item) => [
+  [item.nameZh, item] as const,
+  [item.nameEn, item] as const
+]));
+const allowedMaterialNames = new Set(materialByName.keys());
 const mojibakeMarkers = ['锟', '閿', '脙', '脗', '娑', '棣?', '鐠', '�'];
 
 function collectStrings(value: unknown): string[] {

@@ -90,6 +90,8 @@ export async function analyzeIntentWithLLM(input: string): Promise<IntentProfile
         model,
         max_tokens: 700,
         temperature: 0.1,
+        thinking: { type: 'disabled' },
+        reasoning_effort: 'none',
         response_format: { type: 'json_object' },
         messages: [
           {
