@@ -153,7 +153,6 @@ export default function HomePage({ searchParams }: PageProps) {
             <div className="hand-line" aria-hidden="true" />
           </div>
           <div className="qr-card"><canvas ref={qrCanvas} /><p>{tr('qrHint')}</p></div>
-          <img src="/brand/floral-mascot.gif" alt="" className="hero-mascot" aria-hidden="true" />
         </section>
 
         <section className="workspace-grid">
