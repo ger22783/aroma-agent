@@ -68,7 +68,7 @@ function normalizeIntent(raw: RawIntent, input: string, fallback: IntentProfile)
   };
 }
 
-export async function analyzeIntentWithLLM(input: string): Promise<IntentProfile> {
+export async function analyzeIntentWithLLM(input: string, preferences?: unknown): Promise<IntentProfile> {
   const fallback = analyzeIntent(input);
   const apiKey = getEnv('OPENAI_API_KEY');
   if (!apiKey) return fallback;
@@ -90,8 +90,6 @@ export async function analyzeIntentWithLLM(input: string): Promise<IntentProfile
         model,
         max_tokens: 700,
         temperature: 0.1,
-        thinking: { type: 'disabled' },
-        reasoning_effort: 'none',
         response_format: { type: 'json_object' },
         messages: [
           {
@@ -104,7 +102,7 @@ export async function analyzeIntentWithLLM(input: string): Promise<IntentProfile
               '只输出 JSON，结构为 {"desiredFacets":{"fresh":0,"sweet":0,"floral":0,"woody":0,"watery":0,"warm":0},"scenarios":[],"moods":[],"dislikes":[],"constraints":[],"explanationLike":false}'
             ].join('\n')
           },
-          { role: 'user', content: input }
+          { role: 'user', content: preferences ? JSON.stringify({ currentRequest: input, knownPreferences: preferences }) : input }
         ]
       })
     });

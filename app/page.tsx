@@ -2,16 +2,18 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
+import { useAccount } from '@/components/AccountExperience';
+import {useLocale} from '@/components/LocaleProvider';
+import {copy} from '@/lib/accounts/locale';
 import type { BoothStep, ChatMessage, GenerateResponse, NoteItem } from '@/lib/types';
 import { quickPrompts, type Lang, t } from '@/lib/i18n';
 
-type PageProps = {
-  searchParams?: { lang?: string | string[] };
-};
-
-export default function HomePage({ searchParams }: PageProps) {
-  const requestedLang = Array.isArray(searchParams?.lang) ? searchParams?.lang[0] : searchParams?.lang;
-  const [lang, setLang] = useState<Lang>(requestedLang === 'en' ? 'en' : 'zh');
+export default function HomePage() {
+  const { temporaryAnswers, refresh:refreshAccount } = useAccount();
+  const [feedbackSmelled,setFeedbackSmelled] = useState(false);
+  const [feedbackScope,setFeedbackScope] = useState('current');
+  const {lang,setLang}=useLocale();
+  const tx=(text:string)=>copy(lang,text);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<(GenerateResponse & { debug?: string }) | null>(null);
@@ -72,7 +74,7 @@ export default function HomePage({ searchParams }: PageProps) {
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message, history, sessionId, currentFormula: result?.formula, lang })
+        body: JSON.stringify({ message, history, sessionId, currentGenerationId: result?.generationId, questionnaire: temporaryAnswers || undefined, lang })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || tr('genericError'));
@@ -83,6 +85,7 @@ export default function HomePage({ searchParams }: PageProps) {
       setSessionId(data.sessionId || sessionId);
       setInput('');
       setRating(0);
+      setFeedbackSmelled(false);setFeedbackScope('current');
       setComment('');
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : tr('genericError'));
@@ -109,11 +112,12 @@ export default function HomePage({ searchParams }: PageProps) {
       const res = await fetch('/api/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: result.sessionId, rating, comment })
+        body: JSON.stringify({ generationId:result.generationId,smelled:feedbackSmelled,scope:feedbackScope,sessionId: result.sessionId, rating, comment })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || tr('genericError'));
       setFeedbackStatus(tr('feedbackThanks'));
+      await refreshAccount();
     } catch (caughtError) {
       setFeedbackStatus(caughtError instanceof Error ? caughtError.message : tr('genericError'));
     }
@@ -267,6 +271,8 @@ export default function HomePage({ searchParams }: PageProps) {
                   {[1, 2, 3, 4, 5].map((score) => <button key={score} onClick={() => setRating(score)} className={score <= rating ? 'is-selected' : ''}>{score}</button>)}
                 </div>
                 <textarea value={comment} onChange={(event) => setComment(event.target.value)} className="feedback-input" placeholder={tr('feedbackPlaceholder')} />
+                <label className="feedback-smelled"><input type="checkbox" checked={feedbackSmelled} onChange={e=>setFeedbackSmelled(e.target.checked)}/> {tx("我实际闻过这份配方的香水样品")}</label>
+                <label className="account-input">{tx("这次反馈适用于哪里？")}<select value={feedbackScope} onChange={e=>setFeedbackScope(e.target.value)}><option value="current">{lang==='en'?'This formula only':'仅这次'}</option><option value="global">{tx("以后的日常偏好（确认后记住）")}</option></select></label>
                 <div className="feedback-actions">
                   <button onClick={handleFeedback} disabled={!rating} className="primary-button small">{tr('feedbackSubmit')}</button>
                   {feedbackStatus ? <span>{feedbackStatus}</span> : null}

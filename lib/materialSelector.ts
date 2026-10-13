@@ -84,7 +84,7 @@ function scoreMaterial(intent: IntentProfile, material: BoothMaterial): Material
   const scenarioScore = overlapScore(intent.scenarios, material.scenarios) * 8;
   const moodScore = overlapScore(intent.moods, material.moods) * 5;
   const safeBoothBonus = material.intensity <= 3 ? 3 : 0;
-  const score = facetScore(intent, material) + scenarioScore + moodScore + safeBoothBonus - dislikePenalty(intent, material);
+  const score = facetScore(intent, material) + (intent.materialPreferenceScores?.[material.id] || 0) + scenarioScore + moodScore + safeBoothBonus - dislikePenalty(intent, material);
 
   return {
     material,
@@ -111,6 +111,7 @@ function bestByRole(candidates: MaterialCandidate[], role: NoteRole, intent: Int
 
 export function selectMaterials(intent: IntentProfile): SelectionPlan {
   const candidates = boothMaterials
+    .filter(material => !intent.bannedMaterialIds?.includes(material.id))
     .map((material) => scoreMaterial(intent, material))
     .sort((a, b) => b.score - a.score);
 

@@ -50,10 +50,41 @@ export type FormulaResponse = {
     longerLasting: string;
   };
   safetyNote: string;
+  quantitativeAnalysis?: {
+    method: string;
+    totalScore: number;
+    scoreBreakdown: {
+      vectorFit: number;
+      scenarioFit: number;
+      moodFit: number;
+      structureFit: number;
+      usageFit: number;
+      intensityFit: number;
+      penalty: number;
+      squaredError: number;
+    };
+    targetVector: Record<string, number>;
+    formulaVector: Record<string, number>;
+    averageIntensity: number;
+    optimizationTrace?: {
+      method: string;
+      relaxedWeights?: Array<{ material: string; percentage: number }>;
+      activeSetCount?: number;
+      selectedMaterials: string[];
+    };
+    rationale: string[];
+    judgeCheck?: {
+      passed: boolean;
+      summary: string;
+      issues: string[];
+    };
+  };
   rawText?: string;
 };
 
 export type GenerateResponse = {
+  generationId?: string;
+  profileVersionUsed?: number | null;
   mode: 'llm' | 'fallback';
   sessionId: string;
   replyText: string;
@@ -132,6 +163,7 @@ export function sanitizeFormula(raw: any): FormulaResponse {
       longerLasting: toStringValue(adjustments.longerLasting)
     } : undefined,
     safetyNote: toStringValue(raw?.safetyNote),
+    quantitativeAnalysis: raw?.quantitativeAnalysis,
     rawText: toStringValue(raw?.rawText) || undefined
   };
 }

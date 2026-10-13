@@ -1,6 +1,7 @@
 import { boothMaterials, type BoothMaterial, type NoteRole } from '@/data/ingredients';
 import type { Lang } from './i18n';
 import { analyzeIntent } from './intent';
+import { optimizeFormula } from './formulaOptimizer';
 import { selectMaterials, type SelectionPlan } from './materialSelector';
 import type { BoothStep, FormulaResponse, NoteItem } from './types';
 
@@ -33,58 +34,10 @@ function notesToSteps(topNotes: NoteItem[], heartNotes: NoteItem[], baseNotes: N
   ];
 }
 
-function pickMaterial(plan: SelectionPlan, role: NoteRole, fallbackId: string, used: Set<string>) {
-  const roleCandidates = role === 'top' ? plan.top : role === 'heart' ? plan.heart : plan.base;
-  const candidate = roleCandidates.find((item) => !used.has(item.material.nameZh));
-  const material = candidate?.material || boothMaterials.find((item) => item.id === fallbackId) || boothMaterials[0];
-  used.add(material.nameZh);
-  return material;
-}
-
-function clampUsage(material: BoothMaterial, desired: number) {
-  const [min, max] = material.usageRange;
-  return Math.max(min, Math.min(max, desired));
-}
-
 function buildNotes(plan: SelectionPlan, lang: Lang) {
-  const used = new Set<string>();
-  const wantsSweet = plan.intent.desiredFacets.sweet >= 4 && !plan.intent.dislikes.includes('甜腻');
-  const wantsWoody = plan.intent.desiredFacets.woody >= 4;
-  const wantsWatery = plan.intent.desiredFacets.watery >= 4;
-
-  const topA = pickMaterial(plan, 'top', wantsWatery ? 'sea-breeze-bell' : 'green-tea', used);
-  const topB = pickMaterial(plan, 'top', 'japanese-citrus', used);
-  const heartA = pickMaterial(plan, 'heart', wantsSweet ? 'osmanthus-oolong' : 'jasmine-floral-ring', used);
-  const heartB = pickMaterial(plan, 'heart', wantsWatery ? 'watery-berry' : 'osmanthus-oolong', used);
-  const baseA = pickMaterial(plan, 'base', wantsSweet ? 'french-vanilla' : wantsWoody ? 'smoky-agarwood' : 'desert-rose', used);
-
-  const materialName = (material: BoothMaterial) => lang === 'en' ? material.nameEn : material.nameZh;
-  let topNotes: NoteItem[] = [
-    { name: materialName(topA), percentage: clampUsage(topA, 22) },
-    { name: materialName(topB), percentage: clampUsage(topB, 18) }
-  ];
-  let heartNotes: NoteItem[] = [
-    { name: materialName(heartA), percentage: clampUsage(heartA, 28) }
-  ];
-  let baseNotes: NoteItem[] = [
-    { name: materialName(baseA), percentage: clampUsage(baseA, 24) }
-  ];
-
-  if (heartB.nameZh !== heartA.nameZh && topNotes.length + heartNotes.length + baseNotes.length < 5) {
-    heartNotes.push({ name: materialName(heartB), percentage: clampUsage(heartB, 8) });
-  }
-
-  const all = [...topNotes, ...heartNotes, ...baseNotes];
-  const total = all.reduce((sum, item) => sum + item.percentage, 0);
-  const delta = 100 - total;
-  const target = heartNotes[0] || baseNotes[0] || topNotes[0];
-  target.percentage += delta;
-
-  topNotes = topNotes.filter((item) => item.percentage > 0);
-  heartNotes = heartNotes.filter((item) => item.percentage > 0);
-  baseNotes = baseNotes.filter((item) => item.percentage > 0);
-
-  return { topNotes, heartNotes, baseNotes };
+  const optimized = optimizeFormula(plan.intent, plan);
+  const localized = (notes: NoteItem[]) => notes.map(note => ({...note,name:lang === 'en' ? boothMaterials.find(m => m.nameZh === note.name)?.nameEn || note.name : note.name}));
+  return { topNotes:localized(optimized.topNotes),heartNotes:localized(optimized.heartNotes),baseNotes:localized(optimized.baseNotes),optimized };
 }
 
 function roleText(materialName: string, lang: Lang) {
@@ -111,6 +64,7 @@ function translateTerm(value: string) {
 
 function buildFormula(plan: SelectionPlan, lang: Lang): FormulaResponse {
   const notes = buildNotes(plan, lang);
+  const optimized = notes.optimized;
   const allNotes = [...notes.topNotes, ...notes.heartNotes, ...notes.baseNotes];
   const nameJoiner = lang === 'en' ? ' and ' : '和';
   const topNames = notes.topNotes.map((item) => item.name).join(nameJoiner);
@@ -141,7 +95,8 @@ function buildFormula(plan: SelectionPlan, lang: Lang): FormulaResponse {
       keywords,
       suitableScenarios: scenarios
     },
-    formula: notes,
+    formula: {topNotes:notes.topNotes,heartNotes:notes.heartNotes,baseNotes:notes.baseNotes},
+    quantitativeAnalysis: {method:"Constrained Mixture Optimization",totalScore:Number((optimized.score.total*100).toFixed(1)),scoreBreakdown:{...optimized.score,squaredError:optimized.score.squaredError},targetVector:optimized.targetVector,formulaVector:optimized.formulaVector,averageIntensity:optimized.averageIntensity,rationale:lang === "en" ? ["Computed using the available material profiles and mixture constraints."] : optimized.rationale},
     blendingSuggestion: {
       recommendedConcentration: lang === 'en'
         ? 'Spray the top, heart, and base notes on one scent strip. Use one spray per material, wait 10 seconds between steps, then let it dry for 2-3 minutes.'

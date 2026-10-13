@@ -161,3 +161,7 @@ https://perfume-booth-app.vercel.app
 - 修改中文文案后，运行乱码扫描，避免历史编码问题回归。
 - 解释追问必须保留当前配方，避免用户问“为什么要加 X”时系统答非所问并重新生成。
 - 首页仍以路演体验为主，不要做成复杂专业后台；专业性主要体现在选材逻辑、回复结构和后台数据记录。
+
+## Accounts and bilingual interface
+
+See [ACCOUNT_SYSTEM.md](ACCOUNT_SYSTEM.md) for registration, questionnaire, preference and feedback storage, administrator access, configuration, and verification. User records are stored in Postgres; Vercel runs the web application. Configure the server environment from `.env.example`; never commit actual credentials.
